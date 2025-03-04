@@ -1,6 +1,6 @@
 import httpx
 from fastapi import FastAPI, HTTPException
-from payment_gateway_api.utils import PaymentGateway
+from payment_gateway_api.utils import PaymentGateway, IDGenerator
 from .model import Transaction, Status
 
 app = FastAPI()
@@ -10,15 +10,29 @@ database = {}
 """
 POST endpoints
 """
-@app.post('/payments')
-async def payment_to_simulator(transaction: Transaction) -> dict:
+@app.post('/merchant')
+async def create_new_merchant():
+    """
+    Creates a new merchant, giving them an individual merchant id.
+    """
+    merchant_id = IDGenerator().generate_merchant_id()
+    database[merchant_id] = {}
+    return {"merchant_id": merchant_id}
+
+@app.post('/merchant/{merchant_id}/transaction')
+async def payment_to_simulator(merchant_id: str, transaction: Transaction) -> dict:
+    """
+    Takes a transaction for an individual merchant, verifies it using the
+    payment gateway, sends data to the bank simulator if necessary, and sends
+    result to server.
+    """
     transaction_details = payment_gateway.validate_transaction(transaction)
     id = transaction_details.id
     status = transaction_details.status
     message = ''
 
     if status == Status.REJECTED:
-        database[id] = transaction_details
+        database[merchant_id][id] = transaction_details
         message = 'Transaction rejected.'
         return {"id": id, "status_code": status, "message": message}
     
@@ -39,19 +53,21 @@ async def payment_to_simulator(transaction: Transaction) -> dict:
         message = 'Transaction authorized.'
     
     transaction_details = transaction_details.model_copy(update={"status": status})
-    database[id] = transaction_details
+    database[merchant_id][id] = transaction_details
 
     return {"id": id, "status_code": status, "message": message}
 
 """
 GET endpoints
 """
-@app.get('/payments/{payment_id}')
-async def get_payments(payment_id: str) -> dict:
-    if id not in database.keys():
-        raise HTTPException(status_code=404, detail=f'No transaction history for id, {payment_id}.')
-    return {"transaction_data": database[payment_id]}
-    
+@app.get('/merchant/{merchant_id}/transaction')
+async def get_payments(merchant_id: str,) -> dict:
+    """
+    Get request that returns all transaction data for a given id.
+    """
+    if merchant_id not in database.keys():
+        raise HTTPException(status_code=404, detail=f'No transaction history found.')
+    return {"transaction_data": database[merchant_id]}
 
 """
 Helper functions
