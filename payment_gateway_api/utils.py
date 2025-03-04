@@ -10,7 +10,7 @@ class IDGenerator():
         """
         Creatus a uuid for a given merchant
         """
-        return str(uuid4())[:5]
+        return str(uuid4())[:8]
 
     def generate_transaction_id(self):
         """
